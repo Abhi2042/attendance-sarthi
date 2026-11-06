@@ -87,9 +87,21 @@ const ROT=[
 const BATCHES='ABCDEFGHIJKLMN'.split('');
 const def=()=>({name:'',cb:'',pg:'A',done:false,tT:75,tP:80,theme:'auto',rec:{}});
 const LS=(k,v)=>{try{if(v===undefined)return JSON.parse(localStorage.getItem(k));localStorage.setItem(k,JSON.stringify(v))}catch(e){return null}};
+const DATA_SCHEMA_VERSION=1;
+const profileKey=p=>'mbbs-u-'+p, safetyKey=p=>'mbbs-safe-'+p;
+function makeSafetyCopy(p){
+ if(!p)return false;
+ try{
+  const raw=localStorage.getItem(profileKey(p));
+  if(!raw)return false;
+  // Keep the last known-good profile separately before any overwrite.
+  localStorage.setItem(safetyKey(p),JSON.stringify({app:'attendance-sarthi-safety',schemaVersion:DATA_SCHEMA_VERSION,savedAt:new Date().toISOString(),raw}));
+  return true;
+ }catch(e){return false}
+}
 let U=null,P='',view='today',armed=false;
-const save=()=>{if(U)LS('mbbs-u-'+P,U)};
-{const p=LS('mbbs-cur');if(p){const u=LS('mbbs-u-'+p);if(u){U=Object.assign(def(),u);P=p}}}
+const save=()=>{if(U&&P){makeSafetyCopy(P);LS(profileKey(P),U)}};
+{const p=LS('mbbs-cur');if(p){const u=LS(profileKey(p));if(u){U=Object.assign(def(),u);P=p}}}
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const pad=n=>String(n).padStart(2,'0');
 const iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
@@ -148,7 +160,30 @@ function doLogin(){
  const n=$('#ln').value.trim(),p=$('#lp').value.replace(/\D/g,'').replace(/^91(?=\d{10}$)/,'');
  if(!n){$('#le').textContent='Enter your name.';return}
  if(p.length!==10){$('#le').textContent='Enter a 10-digit phone number.';return}
- U=Object.assign(def(),LS('mbbs-u-'+p)||{});U.name=n;P=p;LS('mbbs-cur',p);save();theme();render();
+ U=Object.assign(def(),LS('mbbs-u-'+p)||{});U.name=n;P=p;LS('mbbs-cur',p);save();function restoreSafetyCopy(){
+ const msg=$('#backup-msg');
+ let snap;
+ try{snap=JSON.parse(localStorage.getItem(safetyKey(P))||'null')}catch(e){snap=null}
+ if(!snap||snap.app!=='attendance-sarthi-safety'||typeof snap.raw!=='string'){
+  if(msg)msg.textContent='No local safety copy is available on this device yet.';
+  return;
+ }
+ let previous;
+ try{previous=JSON.parse(snap.raw)}catch(e){
+  if(msg)msg.textContent='The saved safety copy could not be read. Current data has not been changed.';
+  return;
+ }
+ if(!previous||typeof previous!=='object'||Array.isArray(previous)||!previous.rec||typeof previous.rec!=='object'||Array.isArray(previous.rec)){
+  if(msg)msg.textContent='The saved safety copy failed validation. Current data has not been changed.';
+  return;
+ }
+ if(!confirm('Restore the previous local copy saved on '+new Date(snap.savedAt).toLocaleString()+ '? This will replace the currently loaded profile. A copy of the current data will be saved first.'))return;
+ makeSafetyCopy(P);
+ U=Object.assign(def(),previous);
+ LS(profileKey(P),U);theme();armed=false;view='set';render();
+ const m=$('#backup-msg');if(m)m.textContent='Previous local copy restored.';
+}
+theme();render();
 }
 const grid=(k)=>`<div class="grid">${BATCHES.map(l=>`<button class="${U[k]===l?'on':''}" onclick="setS('${k}','${l}')">${l}</button>`).join('')}</div>`;
 const pgSeg=()=>`<div class="seg" style="margin-top:10px"><button class="${U.pg==='A'?'on':''}" onclick="setS('pg','A')">Group A</button><button class="${U.pg==='B'?'on':''}" onclick="setS('pg','B')">Group B</button></div>`;
@@ -189,7 +224,7 @@ function sett(){
 <div class="set"><b>Theory minimum</b><div><input type="number" min="1" max="100" value="${U.tT}" aria-label="Theory minimum percent" onchange="setT('tT',this.value)"> %</div></div>
 <div class="set"><div><b>Practical and clinical minimum</b></div><div><input type="number" min="1" max="100" value="${U.tP}" aria-label="Practical minimum percent" onchange="setT('tP',this.value)"> %</div></div>
 <div class="set"><b>Theme</b><div class="seg" style="width:220px">${['auto','light','dark'].map(t=>`<button class="${U.theme===t?'on':''}" onclick="setS('theme','${t}')">${t[0].toUpperCase()+t.slice(1)}</button>`).join('')}</div></div></div>
-<div class="card"><b>Backup and transfer</b><br><small>Save your attendance and settings as a JSON file, or restore them on this or another device. Keep the file somewhere safe.</small><div class="tools"><button class="btn" onclick="exportData()">Export data</button><button class="btn" onclick="document.getElementById('import-file').click()">Import data</button></div><input id="import-file" type="file" accept=".json,application/json" style="display:none" onchange="importData(this)"><small id="backup-msg" role="status"></small></div>
+<div class="card"><b>Backup and transfer</b><br><small>Export a JSON backup or import one from another device. The app also keeps a separate local safety copy before replacing saved data.</small><div class="tools"><button class="btn" onclick="exportData()">Export data</button><button class="btn" onclick="document.getElementById('import-file').click()">Import data</button></div><input id="import-file" type="file" accept=".json,application/json" style="display:none" onchange="importData(this)"><div class="tools"><button class="btn" onclick="restoreSafetyCopy()">Restore previous local copy</button></div><small id="backup-msg" role="status"></small></div>
 <div class="card"><b>Reset attendance</b><br><small>Clears every mark saved for this account on this device.</small><div class="tools"><button class="btn" onclick="reset()">${armed?'Tap again to erase everything':'Reset all data'}</button></div></div>`;
 }
 function render(sc){
@@ -210,7 +245,7 @@ function reset(){if(!armed){armed=true;refresh();return}U.rec={};armed=false;sav
 function logout(){LS('mbbs-cur',null);U=null;P='';view='today';theme();render()}
 function exportData(){
  if(!U)return;
- const backup={app:'attendance-sarthi',formatVersion:1,exportedAt:new Date().toISOString(),data:U};
+ const backup={app:'attendance-sarthi',formatVersion:2,schemaVersion:DATA_SCHEMA_VERSION,exportedAt:new Date().toISOString(),data:U};
  const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
  const url=URL.createObjectURL(blob),a=document.createElement('a');
  a.href=url;a.download='attendance-sarthi-backup-'+iso(TOD)+'.json';
@@ -228,16 +263,40 @@ function importData(input){
   let backup;
   try{backup=JSON.parse(reader.result)}catch(e){fail('That file is not valid JSON.');return}
   const d=backup&&backup.data;
-  const valid=backup&&backup.app==='attendance-sarthi'&&backup.formatVersion===1&&d&&typeof d==='object'&&!Array.isArray(d)&&d.rec&&typeof d.rec==='object'&&!Array.isArray(d.rec);
+  const valid=backup&&backup.app==='attendance-sarthi'&&[1,2].includes(backup.formatVersion)&&d&&typeof d==='object'&&!Array.isArray(d)&&d.rec&&typeof d.rec==='object'&&!Array.isArray(d.rec);
   if(!valid){fail('This is not a recognised Attendance Sarthi backup. Your current data is unchanged.');return}
   const validMarks=Object.entries(d.rec).every(([date,marks])=>/^\d{4}-\d{2}-\d{2}$/.test(date)&&marks&&typeof marks==='object'&&!Array.isArray(marks)&&Object.entries(marks).every(([id,v])=>['s1','s2','s3','s4','f0','f1','f2','fv'].includes(id)&&['P','A','C'].includes(v)));
   if(!validMarks){fail('The backup contains invalid attendance records. Your current data is unchanged.');return}
-  if(!confirm('Import this backup into the currently signed-in profile? This will replace its attendance marks and settings on this device. Export your current data first if you may need it.')){fail('Import cancelled. Your current data is unchanged.');return}
+  if(!confirm('Import this backup into the currently signed-in profile? The app will first save a separate local safety copy of the current data. Importing will then replace the current attendance marks and settings. Continue?')){fail('Import cancelled. Your current data is unchanged.');return}
+  makeSafetyCopy(P);
   U=Object.assign(def(),d,{rec:d.rec});
-  save();theme();input.value='';armed=false;view='set';render();
+  LS(profileKey(P),U);theme();input.value='';armed=false;view='set';render();
   const m=$('#backup-msg');if(m)m.textContent='Backup imported successfully.';
  };
  reader.readAsText(file);
+}
+function restoreSafetyCopy(){
+ const msg=$('#backup-msg');
+ let snap;
+ try{snap=JSON.parse(localStorage.getItem(safetyKey(P))||'null')}catch(e){snap=null}
+ if(!snap||snap.app!=='attendance-sarthi-safety'||typeof snap.raw!=='string'){
+  if(msg)msg.textContent='No local safety copy is available on this device yet.';
+  return;
+ }
+ let previous;
+ try{previous=JSON.parse(snap.raw)}catch(e){
+  if(msg)msg.textContent='The saved safety copy could not be read. Current data has not been changed.';
+  return;
+ }
+ if(!previous||typeof previous!=='object'||Array.isArray(previous)||!previous.rec||typeof previous.rec!=='object'||Array.isArray(previous.rec)){
+  if(msg)msg.textContent='The saved safety copy failed validation. Current data has not been changed.';
+  return;
+ }
+ if(!confirm('Restore the previous local copy saved on '+new Date(snap.savedAt).toLocaleString()+ '? This will replace the currently loaded profile. A copy of the current data will be saved first.'))return;
+ makeSafetyCopy(P);
+ U=Object.assign(def(),previous);
+ LS(profileKey(P),U);theme();armed=false;view='set';render();
+ const m=$('#backup-msg');if(m)m.textContent='Previous local copy restored.';
 }
 theme();render();
 </script>
