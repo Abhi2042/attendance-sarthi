@@ -14,8 +14,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#eaf0f6;--card:#fff;--ink:#12203a;--mut:#5d6b82;--line:#d9e1ec;--acc:#2f4bd8;--ok:#0f8a5f;--warn:#b7791f;--bad:#c2362f;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d1424;--card:#152038;--ink:#e6ecf7;--mut:#93a1bb;--line:#24314d;--acc:#8ea2ff;--ok:#3ecf95;--warn:#e8b04b;--bad:#ff7d75}}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]):not([data-theme="oled"]){--bg:#0d1424;--card:#152038;--ink:#e6ecf7;--mut:#93a1bb;--line:#24314d;--acc:#8ea2ff;--ok:#3ecf95;--warn:#e8b04b;--bad:#ff7d75}}
 :root[data-theme="dark"]{--bg:#0d1424;--card:#152038;--ink:#e6ecf7;--mut:#93a1bb;--line:#24314d;--acc:#8ea2ff;--ok:#3ecf95;--warn:#e8b04b;--bad:#ff7d75}
+:root[data-theme="oled"]{--bg:#000000;--card:#000000;--ink:#e6ecf7;--mut:#8899ac;--line:#222222;--acc:#7089ff;--ok:#3ecf95;--warn:#e8b04b;--bad:#ff7d75}
 html{scroll-padding-top:env(safe-area-inset-top,0px);background:var(--bg)}
 *{box-sizing:border-box}
 body{margin:0 auto;background:var(--bg);color:var(--ink);font-family:'Bricolage Grotesque',system-ui,-apple-system,sans-serif;padding:16px 16px 96px;max-width:560px;line-height:1.35}
@@ -47,7 +48,8 @@ small,.m{color:var(--mut);font-size:13px}
 .msg{font-size:14px}
 .ring{display:flex;align-items:center;gap:18px;margin:14px 0 6px}
 .ring svg{flex:none}
-.tools{display:flex;gap:8px;margin:12px 0}
+.tools{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.tools .btn{flex:1 1 calc(50% - 4px)}
 .btn{flex:1;padding:10px 8px}
 .seg{display:flex;gap:6px}.seg button{flex:1}
 .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:10px}
@@ -72,7 +74,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--acc);outline-of
 <main id="v"></main>
 <nav hidden><button data-v="today" onclick="sv('today')">Today</button><button data-v="over" onclick="sv('over')">Overview</button><button data-v="set" onclick="sv('set')">Settings</button></nav>
 <script>
-const START=new Date(2026,8,28),LEC_END=new Date(2027,7,31),END=new Date(2027,7,31);
+const START=new Date(2026,8,28),LEC_END=new Date(2027,7,31),CLINICAL_THEORY_END=new Date(2027,0,31),END=new Date(2027,7,31);
 const SC={Pharmacology:'#7c5cd6',Microbiology:'#0f9d8a',Pathology:'#d9467a',Medicine:'#2f6fe0','Community Medicine':'#e08a1e','Forensic Medicine':'#6b7a90',ENT:'#c2562f',Ophthalmology:'#1a9ad6','Obs & Gynae':'#c23a9a',Paediatrics:'#4aa53a',Surgery:'#b8302f'};
 const DEPT=['Medicine','Surgery','Obs & Gynae','Paediatrics','Community Medicine','Ophthalmology','ENT'];
 const ROT=[
@@ -94,7 +96,6 @@ function makeSafetyCopy(p){
  try{
   const raw=localStorage.getItem(profileKey(p));
   if(!raw)return false;
-  // Keep the last known-good profile separately before any overwrite.
   localStorage.setItem(safetyKey(p),JSON.stringify({app:'attendance-sarthi-safety',schemaVersion:DATA_SCHEMA_VERSION,savedAt:new Date().toISOString(),raw}));
   return true;
  }catch(e){return false}
@@ -113,19 +114,32 @@ const perOf=d=>ROT.findIndex(r=>r.ranges.some(p=>d>=p[0]&&d<=p[1]));
 const bi=()=>BATCHES.indexOf(U.cb)%7;
 const deptFor=p=>DEPT[(bi()+p)%7];
 const rotIdx=dep=>(DEPT.indexOf(dep)-bi()+7)%7;
-function theme(){const t=U?U.theme:'auto';t==='auto'?document.documentElement.removeAttribute('data-theme'):document.documentElement.dataset.theme=t}
+function theme(){
+ const t=U?U.theme:'auto';
+ if(t==='auto'){
+  document.documentElement.removeAttribute('data-theme');
+ }else{
+  document.documentElement.dataset.theme=t;
+ }
+}
 function slots(d){
  const w=d.getDay();if(!w)return[];
  const lec=d<=LEC_END,r=[];
+ const isPostJan=d>CLINICAL_THEORY_END;
  if(lec){
   const odd=Math.ceil(d.getDate()/7)%2===1;
-  r.push({id:'s1',t:'9 to 10 AM',sub:['','Pharmacology','Microbiology','Pathology','Medicine',odd?'Ophthalmology':'ENT',odd?'Obs & Gynae':'Paediatrics'][w],ty:'T',n:w>=5?'Lecture, alternates by week of the month':'Lecture'});
+  let morningSub = ['','Pharmacology','Microbiology','Pathology','Medicine',odd?'Ophthalmology':'ENT',odd?'Obs & Gynae':'Paediatrics'][w];
+  if(isPostJan){
+   morningSub = ['','Pharmacology','Microbiology','Pathology','Pharmacology','Pathology',odd?'Ophthalmology':'ENT'][w];
+  }
+  r.push({id:'s1',t:'9 to 10 AM',sub:morningSub,ty:'T',n:isPostJan?(w===6?'Lecture, alternates by week':'Core theory lecture'):(w>=5?'Lecture, alternates by week of the month':'Lecture')});
  }
  if(w>=1&&w<=5){const p=perOf(d);r.push(p<0?{t:'10 AM to 1 PM',info:'No clinical posting is scheduled on this date.'}:{id:'s2',t:'10 AM to 1 PM',sub:deptFor(p),ty:'C',n:'Clinical posting, rotation '+(p+1)+' of 7'})}
  else if(lec){[['Pathology','10 to 11 AM'],['Microbiology','11 AM to 12 PM'],['Pharmacology','12 to 1 PM']].forEach((a,i)=>r.push({id:'f'+i,t:a[1],sub:a[0],ty:'P',n:'FAP, remaining students',grp:'fap'}));r.push({id:'fv',t:'10 AM to 1 PM',sub:'Field Visit',ty:'P',n:'Field visit, remaining students',grp:'fap'})}
  if(lec){
   const PR=[0,['Pharmacology','Microbiology'],['Microbiology','Pathology'],['Pathology','Pharmacology'],['Pharmacology','Microbiology'],['Pathology','Pharmacology'],['Microbiology','Pathology']][w];
-  r.push({id:'s3',t:'2 to 4 PM',sub:PR[U.pg==='A'?0:1],ty:'P',n:'Practical, SGT, DOAP (group '+U.pg+')'},{id:'s4',t:'4 to 5 PM',sub:['','Microbiology','Pathology','Pharmacology','Community Medicine','Forensic Medicine','Surgery'][w],ty:'T',n:'Lecture'});
+  let aftLecSub = ['','Microbiology','Pathology','Pharmacology','Community Medicine','Forensic Medicine','Surgery'][w];
+  r.push({id:'s3',t:'2 to 4 PM',sub:PR[U.pg==='A'?0:1],ty:'P',n:'Practical, SGT, DOAP (group '+U.pg+')'},{id:'s4',t:'4 to 5 PM',sub:aftLecSub,ty:'T',n:'Lecture'});
  }
  return r;
 }
@@ -160,30 +174,8 @@ function doLogin(){
  const n=$('#ln').value.trim(),p=$('#lp').value.replace(/\D/g,'').replace(/^91(?=\d{10}$)/,'');
  if(!n){$('#le').textContent='Enter your name.';return}
  if(p.length!==10){$('#le').textContent='Enter a 10-digit phone number.';return}
- U=Object.assign(def(),LS('mbbs-u-'+p)||{});U.name=n;P=p;LS('mbbs-cur',p);save();function restoreSafetyCopy(){
- const msg=$('#backup-msg');
- let snap;
- try{snap=JSON.parse(localStorage.getItem(safetyKey(P))||'null')}catch(e){snap=null}
- if(!snap||snap.app!=='attendance-sarthi-safety'||typeof snap.raw!=='string'){
-  if(msg)msg.textContent='No local safety copy is available on this device yet.';
-  return;
- }
- let previous;
- try{previous=JSON.parse(snap.raw)}catch(e){
-  if(msg)msg.textContent='The saved safety copy could not be read. Current data has not been changed.';
-  return;
- }
- if(!previous||typeof previous!=='object'||Array.isArray(previous)||!previous.rec||typeof previous.rec!=='object'||Array.isArray(previous.rec)){
-  if(msg)msg.textContent='The saved safety copy failed validation. Current data has not been changed.';
-  return;
- }
- if(!confirm('Restore the previous local copy saved on '+new Date(snap.savedAt).toLocaleString()+ '? This will replace the currently loaded profile. A copy of the current data will be saved first.'))return;
- makeSafetyCopy(P);
- U=Object.assign(def(),previous);
- LS(profileKey(P),U);theme();armed=false;view='set';render();
- const m=$('#backup-msg');if(m)m.textContent='Previous local copy restored.';
-}
-theme();render();
+ U=Object.assign(def(),LS('mbbs-u-'+p)||{});U.name=n;P=p;LS('mbbs-cur',p);save();
+ theme();render();
 }
 const grid=(k)=>`<div class="grid">${BATCHES.map(l=>`<button class="${U[k]===l?'on':''}" onclick="setS('${k}','${l}')">${l}</button>`).join('')}</div>`;
 const pgSeg=()=>`<div class="seg" style="margin-top:10px"><button class="${U.pg==='A'?'on':''}" onclick="setS('pg','A')">Group A</button><button class="${U.pg==='B'?'on':''}" onclick="setS('pg','B')">Group B</button></div>`;
@@ -198,7 +190,7 @@ function today(){
  const fapS=sl.filter(s=>s.grp==='fap'),rest=sl.filter(s=>s.grp!=='fap');
  h+=rest.map(s=>{if(!s.id)return`<div class="card"><div class="tm">${s.t}</div><h3>Clinical posting</h3><small>${s.info}</small></div>`;const v=rc[s.id];return`<div class="card slot" style="--c:${SC[s.sub]||'#5d6b82'}"><div class="tm">${s.t}</div><h3>${esc(s.sub)}</h3><small>${esc(s.n)}</small><div class="acts"><button class="p ${v==='P'?'on':''}" onclick="mark('${s.id}','P')">Present</button><button class="a ${v==='A'?'on':''}" onclick="mark('${s.id}','A')">Absent</button><button class="c ${v==='C'?'on':''}" onclick="mark('${s.id}','C')">Holiday</button></div></div>`}).join('');
  if(fapS.length)h+=`<div class="card" style="border:1.5px dashed var(--acc)"><h3>FAP, remaining students</h3><small>Only mark these if you were among the remaining students that day.</small>`+fapS.map(s=>{const v=rc[s.id];return`<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)"><div class="tm">${s.t}</div><b>${esc(s.sub)}</b><div class="acts"><button class="p ${v==='P'?'on':''}" onclick="mark('${s.id}','P')">Present</button><button class="a ${v==='A'?'on':''}" onclick="mark('${s.id}','A')">Absent</button><button class="c ${v==='C'?'on':''}" onclick="mark('${s.id}','C')">Holiday</button></div></div>`}).join('')+`</div>`;
- h+=`<div class="tools"><button class="btn" onclick="dayAll('P')">All present</button><button class="btn" onclick="dayAll('C')">Day off</button><button class="btn" onclick="dayAll()">Clear day</button></div>`;
+ h+=`<div class="tools"><button class="btn" onclick="dayAll('P')">All present</button><button class="btn" onclick="dayAll('A')">All absent</button><button class="btn" onclick="dayAll('C')">Day off</button><button class="btn" onclick="dayAll()">Clear day</button></div>`;
  if(mk.length)h+=`<p class="m" style="text-align:center">You attended ${pr} of ${mk.length} marked classes today.</p>`;
  return h;
 }
@@ -223,7 +215,7 @@ function sett(){
 <div class="set" style="display:block"><b>Practical group</b>${pgSeg()}<small style="display:block;margin-top:8px">Changing a batch updates days you already marked.</small></div>
 <div class="set"><b>Theory minimum</b><div><input type="number" min="1" max="100" value="${U.tT}" aria-label="Theory minimum percent" onchange="setT('tT',this.value)"> %</div></div>
 <div class="set"><div><b>Practical and clinical minimum</b></div><div><input type="number" min="1" max="100" value="${U.tP}" aria-label="Practical minimum percent" onchange="setT('tP',this.value)"> %</div></div>
-<div class="set"><b>Theme</b><div class="seg" style="width:220px">${['auto','light','dark'].map(t=>`<button class="${U.theme===t?'on':''}" onclick="setS('theme','${t}')">${t[0].toUpperCase()+t.slice(1)}</button>`).join('')}</div></div></div>
+<div class="set" style="display:block"><b>Theme</b><div class="seg" style="margin-top:8px">${['auto','light','dark','oled'].map(t=>`<button class="${U.theme===t?'on':''}" onclick="setS('theme','${t}')">${t==='oled'?'OLED':t[0].toUpperCase()+t.slice(1)}</button>`).join('')}</div></div></div>
 <div class="card"><b>Backup and transfer</b><br><small>Export a JSON backup or import one from another device. The app also keeps a separate local safety copy before replacing saved data.</small><div class="tools"><button class="btn" onclick="exportData()">Export data</button><button class="btn" onclick="document.getElementById('import-file').click()">Import data</button></div><input id="import-file" type="file" accept=".json,application/json" style="display:none" onchange="importData(this)"><div class="tools"><button class="btn" onclick="restoreSafetyCopy()">Restore previous local copy</button></div><small id="backup-msg" role="status"></small></div>
 <div class="card"><b>Reset attendance</b><br><small>Clears every mark saved for this account on this device.</small><div class="tools"><button class="btn" onclick="reset()">${armed?'Tap again to erase everything':'Reset all data'}</button></div></div>`;
 }
@@ -267,7 +259,17 @@ function importData(input){
   if(!valid){fail('This is not a recognised Attendance Sarthi backup. Your current data is unchanged.');return}
   const validMarks=Object.entries(d.rec).every(([date,marks])=>/^\d{4}-\d{2}-\d{2}$/.test(date)&&marks&&typeof marks==='object'&&!Array.isArray(marks)&&Object.entries(marks).every(([id,v])=>['s1','s2','s3','s4','f0','f1','f2','fv'].includes(id)&&['P','A','C'].includes(v)));
   if(!validMarks){fail('The backup contains invalid attendance records. Your current data is unchanged.');return}
-  if(!confirm('Import this backup into the currently signed-in profile? The app will first save a separate local safety copy of the current data. Importing will then replace the current attendance marks and settings. Continue?')){fail('Import cancelled. Your current data is unchanged.');return}
+  
+  let diffWarning = '';
+  if (d.name && U.name && d.name.trim().toLowerCase() !== U.name.trim().toLowerCase()) {
+    diffWarning += `\n\n⚠️ WARNING: This backup belongs to "${d.name}", but you are currently logged in as "${U.name}".`;
+  }
+  if (d.cb && U.cb && d.cb !== U.cb) {
+    diffWarning += `\n\n⚠️ WARNING: This backup is for batch "${d.cb}", but your current batch is "${U.cb}".`;
+  }
+
+  if(!confirm('Import this backup into the currently signed-in profile?' + diffWarning + '\n\nThe app will first save a separate local safety copy of the current data. Importing will then replace the current attendance marks and settings. Continue?')){fail('Import cancelled. Your current data is unchanged.');return}
+  
   makeSafetyCopy(P);
   U=Object.assign(def(),d,{rec:d.rec});
   LS(profileKey(P),U);theme();input.value='';armed=false;view='set';render();
