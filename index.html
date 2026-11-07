@@ -16,7 +16,7 @@
 :root{--bg:#eaf0f6;--card:#fff;--ink:#12203a;--mut:#5d6b82;--line:#d9e1ec;--acc:#2f4bd8;--ok:#0f8a5f;--warn:#b7791f;--bad:#c2362f;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]):not([data-theme="oled"]){--bg:#0d1424;--card:#152038;--ink:#e6ecf7;--mut:#93a1bb;--line:#24314d;--acc:#8ea2ff;--ok:#3ecf95;--warn:#e8b04b;--bad:#ff7d75}}
 :root[data-theme="dark"]{--bg:#0d1424;--card:#152038;--ink:#e6ecf7;--mut:#93a1bb;--line:#24314d;--acc:#8ea2ff;--ok:#3ecf95;--warn:#e8b04b;--bad:#ff7d75}
-:root[data-theme="oled"]{--bg:#000000;--card:#000000;--ink:#e6ecf7;--mut:#8899ac;--line:#222222;--acc:#7089ff;--ok:#3ecf95;--warn:#e8b04b;--bad:#ff7d75}
+:root[data-theme="oled"]{--bg:#000000;--card:#050505;--ink:#f2f5fb;--mut:#9aa8bb;--line:#252525;--acc:#8ea2ff;--ok:#3ecf95;--warn:#e8b04b;--bad:#ff7d75}
 html{scroll-padding-top:env(safe-area-inset-top,0px);background:var(--bg)}
 *{box-sizing:border-box}
 body{margin:0 auto;background:var(--bg);color:var(--ink);font-family:'Bricolage Grotesque',system-ui,-apple-system,sans-serif;padding:16px 16px 96px;max-width:560px;line-height:1.35}
@@ -121,6 +121,8 @@ function theme(){
  }else{
   document.documentElement.dataset.theme=t;
  }
+ const meta=document.querySelector('meta[name="theme-color"]');
+ if(meta)meta.content=t==='oled'?'#000000':t==='dark'?'#0d1424':t==='light'?'#eaf0f6':'#2f4bd8';
 }
 function slots(d){
  const w=d.getDay();if(!w)return[];
@@ -230,7 +232,7 @@ function sv(v){view=v;armed=false;render()}
 function go(n){const d=new Date(cur);d.setDate(d.getDate()+n);cur=clamp(d);render()}
 function jump(v){if(!v)return;const p=v.split('-');cur=clamp(new Date(+p[0],p[1]-1,+p[2]));render()}
 function mark(id,v){const k=iso(cur),r=U.rec[k]||(U.rec[k]={});if(r[id]===v)delete r[id];else r[id]=v;save();refresh()}
-function dayAll(v){const k=iso(cur);if(!v)delete U.rec[k];else{const r=U.rec[k]={};slots(cur).forEach(s=>{if(s.id)r[s.id]=v})}save();refresh()}
+function dayAll(v){const k=iso(cur),eligible=slots(cur).filter(s=>s.id);if(v==='A'&&!confirm('Mark all '+eligible.length+' scheduled classes as ABSENT for '+cur.toLocaleDateString('en-IN')+'? This will replace any existing marks for this day.'))return;if(v==='P'&&!confirm('Mark all '+eligible.length+' scheduled classes as PRESENT for '+cur.toLocaleDateString('en-IN')+'? This will replace any existing marks for this day.'))return;if(!v)delete U.rec[k];else{const r=U.rec[k]={};eligible.forEach(s=>{r[s.id]=v})}save();refresh()}
 function setS(k,v){U[k]=v;save();theme();refresh()}
 function setT(k,v){U[k]=Math.min(100,Math.max(1,+v||75));save();refresh()}
 function reset(){if(!armed){armed=true;refresh();return}U.rec={};armed=false;save();refresh()}
